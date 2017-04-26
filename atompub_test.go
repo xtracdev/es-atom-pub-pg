@@ -689,3 +689,17 @@ func TestRetrieveArchiveHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestPingHandler(t *testing.T) {
+	router := mux.NewRouter()
+	router.HandleFunc(PingURI, PingHandler)
+
+	r, err := http.NewRequest("GET", PingURI, nil)
+	assert.Nil(t, err)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, r)
+
+	//Validate status code
+	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+}
