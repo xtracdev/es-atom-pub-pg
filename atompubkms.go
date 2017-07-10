@@ -12,54 +12,71 @@ import (
 	"crypto/rand"
 	log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/xtracdev/envinject"
 )
-//KMS service
-var kmsSvc *kms.KMS
 
-func init() {
+const (
+	KeyAliasRoot           = "alias/"
+	KeyAlias               = "KEY_ALIAS"
+)
+
+type AtomEncrypter struct {
+	keyAlias string
+	kmsSvc *kms.KMS
+}
+
+func NewAtomEncrypter(env *envinject.InjectedEnv)(*AtomEncrypter,error) {
+	if env == nil {
+		return nil, ErrMissingInjectedEnv
+	}
+
+	encrypter := AtomEncrypter{}
+	var kmsSvc *kms.KMS
+
 	keyAlias := KeyAliasRoot + os.Getenv(KeyAlias)
+	if keyAlias != KeyAliasRoot {
+		encrypter.keyAlias = keyAlias
 
-	if keyAlias != "" {
 		log.Infof("Key alias specified: %s", keyAlias)
 		log.Infof("AWS_REGION: %s", os.Getenv("AWS_REGION"))
 		log.Infof("AWS_PROFILE: %s", os.Getenv("AWS_PROFILE"))
 
 		sess, err := session.NewSession()
-		if err == nil {
-			kmsSvc = kms.New(sess)
-
-			err = CheckKMSConfig()
-			if err != nil {
-				log.Errorf("Error instantiating AWS session: %s. Exiting.", err.Error())
-				os.Exit(1)
-			}
-		} else {
-			log.Infof("Error instantiating AWS session: %s. Exiting.", err.Error())
-			os.Exit(1)
+		if err != nil {
+			return nil, err
 		}
 
+		kmsSvc = kms.New(sess)
+		encrypter.kmsSvc = kmsSvc
+
+		err = encrypter.CheckKMSConfig()
+		if err != nil {
+			return nil,err
+		}
 	}
+
+
+	return &encrypter,nil
 }
 
 
-func CheckKMSConfig() error {
-	keyAlias := KeyAliasRoot + os.Getenv(KeyAlias)
-	if keyAlias == KeyAliasRoot {
+func (ae *AtomEncrypter) CheckKMSConfig() error {
+	if ae.keyAlias == KeyAliasRoot {
 		return nil
 	}
 
 	params := &kms.GenerateDataKeyInput{
-		KeyId:   aws.String(keyAlias), // Required
+		KeyId:   aws.String(ae.keyAlias), // Required
 		KeySpec: aws.String("AES_256"),
 	}
 
-	_, err := kmsSvc.GenerateDataKey(params)
+	_, err := ae.kmsSvc.GenerateDataKey(params)
 	return err
 }
 
 //Encrypt from cryptopasta commit bc3a108a5776376aa811eea34b93383837994340
 //used via the CC0 license. See https://github.com/gtank/cryptopasta
-func Encrypt(plaintext []byte, key *[32]byte) ([]byte, error) {
+func encrypt(plaintext []byte, key *[32]byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
@@ -79,22 +96,21 @@ func Encrypt(plaintext []byte, key *[32]byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-//Encrypt output encrypts the output is indicated by the configuration settings, e.g.
+//EncryptOutput encrypts the output as indicated by the configuration settings, e.g.
 //KEY_ALIAS set to something. Here we obtain the encryption key from KMS, and append the
 //encrypted version of the key to the encoded output.
-func encryptOutput(svc *kms.KMS, out []byte) ([]byte, error) {
-	keyAlias := KeyAliasRoot + os.Getenv(KeyAlias)
-	if keyAlias == KeyAliasRoot {
+func (ae *AtomEncrypter) EncryptOutput(out []byte) ([]byte, error) {
+	if ae.keyAlias == "" {
 		return out, nil
 	}
 
 	//Get the encryption keys
 	params := &kms.GenerateDataKeyInput{
-		KeyId:   aws.String(keyAlias), // Required
+		KeyId:   aws.String(ae.keyAlias), // Required
 		KeySpec: aws.String("AES_256"),
 	}
 
-	resp, err := svc.GenerateDataKey(params)
+	resp, err := ae.kmsSvc.GenerateDataKey(params)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +119,7 @@ func encryptOutput(svc *kms.KMS, out []byte) ([]byte, error) {
 	copy(key[:], resp.Plaintext[0:32])
 
 	//Encrypt the output
-	encrypted, err := Encrypt(out, &key)
+	encrypted, err := encrypt(out, &key)
 	if err != nil {
 		return nil, err
 	}

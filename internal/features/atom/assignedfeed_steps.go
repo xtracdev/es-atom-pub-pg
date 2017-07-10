@@ -20,6 +20,7 @@ import (
 	"github.com/xtracdev/pgconn"
 	"github.com/xtracdev/pgpublish"
 	"time"
+	"github.com/xtracdev/envinject"
 )
 
 func init() {
@@ -32,21 +33,29 @@ func init() {
 	var cacheControl string
 	var etag string
 	var eventID string
+	var atomEncrypter *atompub.AtomEncrypter
 
 	log.Info("Init test envionment")
-	config, err := pgconn.NewEnvConfig()
+	os.Setenv("FEED_THRESHOLD", "2")
+	env, err := envinject.NewInjectedEnv()
 	if err != nil {
 		log.Warnf("Failed environment init: %s", err.Error())
 		initFailed = true
 	}
 
-	db,err := pgconn.OpenAndConnect(config.ConnectString(),1)
+	db,err := pgconn.OpenAndConnect(env,1)
 	if err != nil {
 		log.Warnf("Failed environment init: %s", err.Error())
 		initFailed = true
 	}
 
 	os.Unsetenv(atompub.KeyAlias)
+
+	atomEncrypter, err = atompub.NewAtomEncrypter(env)
+	if err != nil {
+		log.Warnf("Failed environment init: %s", err.Error())
+		initFailed = true
+	}
 
 	Given(`^a single feed with events assigned to it$`, func() {
 		log.Info("check init")
@@ -56,17 +65,13 @@ func init() {
 		}
 
 		log.Info("Create atom pub processor")
-		atomProcessor = atomdata.NewAtomDataProcessor(db.DB)
+		atomProcessor,_ = atomdata.NewAtomDataProcessor(db.DB, env)
 
 		log.Info("clean out tables")
 		_, err = db.Exec("delete from t_aeae_atom_event")
 		assert.Nil(T, err)
 		_, err = db.Exec("delete from t_aefd_feed")
 		assert.Nil(T, err)
-
-		os.Setenv("FEED_THRESHOLD", "2")
-		atomdata.ReadFeedThresholdFromEnv()
-		assert.Equal(T, 2, atomdata.FeedThreshold)
 
 		log.Info("add some events")
 		eventPtr := &goes.Event{
@@ -101,7 +106,7 @@ func init() {
 		assert.Nil(T, err)
 		log.Infof("get feed it %s", feedID)
 
-		archiveHandler, err := atompub.NewArchiveHandler(db.DB, "server:12345")
+		archiveHandler, err := atompub.NewArchiveHandler(db.DB, "server:12345", env, atomEncrypter)
 		if !assert.Nil(T, err) {
 			return
 		}
@@ -226,7 +231,7 @@ func init() {
 	When(`^I do a get on the feedX resource id$`, func() {
 		var err error
 
-		archiveHandler, err := atompub.NewArchiveHandler(db.DB, "server:12345")
+		archiveHandler, err := atompub.NewArchiveHandler(db.DB, "server:12345", env, atomEncrypter)
 		if !assert.Nil(T, err) {
 			return
 		}
@@ -295,7 +300,7 @@ func init() {
 	When(`^I retrieve the event by its id$`, func() {
 		var err error
 
-		eventHandler, err := atompub.NewEventRetrieveHandler(db.DB)
+		eventHandler, err := atompub.NewEventRetrieveHandler(db.DB, atomEncrypter)
 		if !assert.Nil(T, err) {
 			return
 		}

@@ -18,6 +18,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"github.com/xtracdev/envinject"
 )
 
 func TestRetrieve(t *testing.T) {
@@ -128,11 +129,13 @@ func TestRetrieve(t *testing.T) {
 			}
 
 			var eventHandler func(http.ResponseWriter, *http.Request)
+			env,_ := envinject.NewInjectedEnv()
+			ae,_ := NewAtomEncrypter(env)
 			if test.nilDB == false {
-				eventHandler, err = NewEventRetrieveHandler(db)
+				eventHandler, err = NewEventRetrieveHandler(db,ae)
 				assert.Nil(t, err)
 			} else {
-				eventHandler, err = NewEventRetrieveHandler(nil)
+				eventHandler, err = NewEventRetrieveHandler(nil,ae)
 				assert.NotNil(t, err)
 				return
 			}
@@ -330,11 +333,13 @@ func TestRecentFeedHandler(t *testing.T) {
 
 			//Instantiate the handler
 			var eventHandler func(http.ResponseWriter, *http.Request)
+			env,_ := envinject.NewInjectedEnv()
+			ae,_ := NewAtomEncrypter(env)
 			if test.nilDB == false {
-				eventHandler, err = NewRecentHandler(db, "testhost:12345")
+				eventHandler, err = NewRecentHandler(db, "testhost:12345",env, ae)
 				assert.Nil(t, err)
 			} else {
-				eventHandler, err = NewRecentHandler(nil, "testhost:12345")
+				eventHandler, err = NewRecentHandler(nil, "testhost:12345",env, ae)
 				assert.NotNil(t, err)
 				return
 			}
@@ -608,11 +613,13 @@ func TestRetrieveArchiveHandler(t *testing.T) {
 			}
 
 			var archiveHandler func(http.ResponseWriter, *http.Request)
+			env,_ := envinject.NewInjectedEnv()
+			ae,_ := NewAtomEncrypter(env)
 			if test.nilDB == false {
-				archiveHandler, err = NewArchiveHandler(db, "testhost:12345")
+				archiveHandler, err = NewArchiveHandler(db, "testhost:12345", env, ae)
 				assert.Nil(t, err)
 			} else {
-				archiveHandler, err = NewArchiveHandler(nil, "testhost:12345")
+				archiveHandler, err = NewArchiveHandler(nil, "testhost:12345", env, ae)
 				assert.NotNil(t, err)
 				return
 			}
