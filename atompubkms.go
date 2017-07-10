@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"io"
 	"github.com/aws/aws-sdk-go/service/kms"
-	"os"
 	"github.com/aws/aws-sdk-go/aws"
 	"encoding/base64"
 	"fmt"
@@ -33,13 +32,13 @@ func NewAtomEncrypter(env *envinject.InjectedEnv)(*AtomEncrypter,error) {
 	encrypter := AtomEncrypter{}
 	var kmsSvc *kms.KMS
 
-	keyAlias := KeyAliasRoot + os.Getenv(KeyAlias)
+	keyAlias := KeyAliasRoot + env.Getenv(KeyAlias)
 	if keyAlias != KeyAliasRoot {
 		encrypter.keyAlias = keyAlias
 
 		log.Infof("Key alias specified: %s", keyAlias)
-		log.Infof("AWS_REGION: %s", os.Getenv("AWS_REGION"))
-		log.Infof("AWS_PROFILE: %s", os.Getenv("AWS_PROFILE"))
+		log.Infof("AWS_REGION: %s", env.Getenv("AWS_REGION"))
+		log.Infof("AWS_PROFILE: %s", env.Getenv("AWS_PROFILE"))
 
 		sess, err := session.NewSession()
 		if err != nil {
