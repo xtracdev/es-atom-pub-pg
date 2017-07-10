@@ -3,28 +3,28 @@ package esatompubpg
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"io"
-	"github.com/aws/aws-sdk-go/service/kms"
-	"github.com/aws/aws-sdk-go/aws"
+	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"crypto/rand"
 	log "github.com/Sirupsen/logrus"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/xtracdev/envinject"
+	"io"
 )
 
 const (
-	KeyAliasRoot           = "alias/"
-	KeyAlias               = "KEY_ALIAS"
+	KeyAliasRoot = "alias/"
+	KeyAlias     = "KEY_ALIAS"
 )
 
 type AtomEncrypter struct {
 	keyAlias string
-	kmsSvc *kms.KMS
+	kmsSvc   *kms.KMS
 }
 
-func NewAtomEncrypter(env *envinject.InjectedEnv)(*AtomEncrypter,error) {
+func NewAtomEncrypter(env *envinject.InjectedEnv) (*AtomEncrypter, error) {
 	if env == nil {
 		return nil, ErrMissingInjectedEnv
 	}
@@ -50,14 +50,12 @@ func NewAtomEncrypter(env *envinject.InjectedEnv)(*AtomEncrypter,error) {
 
 		err = encrypter.CheckKMSConfig()
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
 	}
 
-
-	return &encrypter,nil
+	return &encrypter, nil
 }
-
 
 func (ae *AtomEncrypter) CheckKMSConfig() error {
 	if ae.keyAlias == KeyAliasRoot {

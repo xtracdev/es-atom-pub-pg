@@ -2,18 +2,18 @@ package esatompubpg
 
 import (
 	"database/sql"
-	log "github.com/Sirupsen/logrus"
 	"encoding/base64"
 	"encoding/xml"
-	"fmt"
-	"time"
 	"errors"
-	"strconv"
+	"fmt"
+	log "github.com/Sirupsen/logrus"
+	"github.com/gorilla/mux"
+	"github.com/xtracdev/envinject"
 	atomdata "github.com/xtracdev/es-atom-data-pg"
 	"golang.org/x/tools/blog/atom"
 	"net/http"
-	"github.com/gorilla/mux"
-	"github.com/xtracdev/envinject"
+	"strconv"
+	"time"
 )
 
 var ErrBadDBConnection = errors.New("Nil db passed to factory method")
@@ -27,7 +27,7 @@ const (
 	RecentHandlerURI       = "/notifications/recent"
 	ArchiveHandlerURI      = "/notifications/{feedId}"
 	RetrieveEventHanderURI = "/events/{aggregateId}/{version}"
-	LinkProto	       = "LINK_PROTO"
+	LinkProto              = "LINK_PROTO"
 )
 
 //Used to serialize event store content when directly retrieving using aggregate id and version
@@ -72,10 +72,6 @@ func addItemsToFeed(feed *atom.Feed, events []atomdata.TimestampedEvent, linkhos
 
 }
 
-
-
-
-
 //NewRecentHandler instantiates the handler for retrieve recent notifications, which are those that have not
 //yet been assigned a feed id. This will be served up at /notifications/recent
 //The linkhostport argument is used to set the host and port in the link relations URL. This is useful
@@ -98,7 +94,6 @@ func NewRecentHandler(db *sql.DB, linkhostport string, env *envinject.InjectedEn
 	if linkProto == "" {
 		linkProto = "https"
 	}
-
 
 	return func(rw http.ResponseWriter, req *http.Request) {
 		events, err := atomdata.RetrieveRecent(db)

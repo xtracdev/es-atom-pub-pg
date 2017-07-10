@@ -7,11 +7,11 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
+	"github.com/xtracdev/envinject"
 	atompub "github.com/xtracdev/es-atom-pub-pg"
+	"github.com/xtracdev/pgconn"
 	"net/http"
 	"strings"
-	"github.com/xtracdev/pgconn"
-	"github.com/xtracdev/envinject"
 )
 
 var insecureConfigBanner = `
@@ -22,7 +22,6 @@ var insecureConfigBanner = `
 |  | |  |\   | .----)   |   |  |____ |   ----.|   --'  | |  |\  \----.|  |____
 |__| |__| \__| |_______/    |_______| \______| \______/  | _| '._____||_______|
  `
-
 
 type atomFeedPubConfig struct {
 	linkhost              string
@@ -58,7 +57,6 @@ func newAtomFeedPubConfig(env *envinject.InjectedEnv) *atomFeedPubConfig {
 			log.Info(e)
 		}
 	}
-
 
 	var configErr bool
 	config := new(atomFeedPubConfig)
@@ -122,7 +120,7 @@ func makeHealthCheck(db *sql.DB, ae *atompub.AtomEncrypter) func(w http.Response
 
 func main() {
 
-	env,err := envinject.NewInjectedEnv()
+	env, err := envinject.NewInjectedEnv()
 	if err != nil {
 		log.Fatalf("Failed environment init: %s", err.Error())
 	}
@@ -138,7 +136,7 @@ func main() {
 	}
 
 	log.Info("Connect to DB")
-	postgressConnection,err := pgconn.OpenAndConnect(env,100)
+	postgressConnection, err := pgconn.OpenAndConnect(env, 100)
 	if err != nil {
 		log.Fatalf("Failed environment init: %s", err.Error())
 	}

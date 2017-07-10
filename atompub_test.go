@@ -9,6 +9,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
+	"github.com/xtracdev/envinject"
 	"golang.org/x/tools/blog/atom"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 	"io/ioutil"
@@ -18,7 +19,6 @@ import (
 	"os"
 	"testing"
 	"time"
-	"github.com/xtracdev/envinject"
 )
 
 func TestRetrieve(t *testing.T) {
@@ -129,13 +129,13 @@ func TestRetrieve(t *testing.T) {
 			}
 
 			var eventHandler func(http.ResponseWriter, *http.Request)
-			env,_ := envinject.NewInjectedEnv()
-			ae,_ := NewAtomEncrypter(env)
+			env, _ := envinject.NewInjectedEnv()
+			ae, _ := NewAtomEncrypter(env)
 			if test.nilDB == false {
-				eventHandler, err = NewEventRetrieveHandler(db,ae)
+				eventHandler, err = NewEventRetrieveHandler(db, ae)
 				assert.Nil(t, err)
 			} else {
-				eventHandler, err = NewEventRetrieveHandler(nil,ae)
+				eventHandler, err = NewEventRetrieveHandler(nil, ae)
 				assert.NotNil(t, err)
 				return
 			}
@@ -333,13 +333,13 @@ func TestRecentFeedHandler(t *testing.T) {
 
 			//Instantiate the handler
 			var eventHandler func(http.ResponseWriter, *http.Request)
-			env,_ := envinject.NewInjectedEnv()
-			ae,_ := NewAtomEncrypter(env)
+			env, _ := envinject.NewInjectedEnv()
+			ae, _ := NewAtomEncrypter(env)
 			if test.nilDB == false {
-				eventHandler, err = NewRecentHandler(db, "testhost:12345",env, ae)
+				eventHandler, err = NewRecentHandler(db, "testhost:12345", env, ae)
 				assert.Nil(t, err)
 			} else {
-				eventHandler, err = NewRecentHandler(nil, "testhost:12345",env, ae)
+				eventHandler, err = NewRecentHandler(nil, "testhost:12345", env, ae)
 				assert.NotNil(t, err)
 				return
 			}
@@ -613,8 +613,8 @@ func TestRetrieveArchiveHandler(t *testing.T) {
 			}
 
 			var archiveHandler func(http.ResponseWriter, *http.Request)
-			env,_ := envinject.NewInjectedEnv()
-			ae,_ := NewAtomEncrypter(env)
+			env, _ := envinject.NewInjectedEnv()
+			ae, _ := NewAtomEncrypter(env)
 			if test.nilDB == false {
 				archiveHandler, err = NewArchiveHandler(db, "testhost:12345", env, ae)
 				assert.Nil(t, err)
