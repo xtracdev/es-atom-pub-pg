@@ -4,34 +4,38 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	. "github.com/gucumber/gucumber"
-	"github.com/stretchr/testify/assert"
-	atomdata "github.com/xtracdev/es-atom-data-pg"
-	atompub "github.com/xtracdev/es-atom-pub-pg"
-	"github.com/xtracdev/goes"
-	"golang.org/x/tools/blog/atom"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
+	. "github.com/gucumber/gucumber"
+	"github.com/stretchr/testify/assert"
+	"github.com/xtracdev/envinject"
+	atomdata "github.com/xtracdev/es-atom-data-pg"
+	atompub "github.com/xtracdev/es-atom-pub-pg"
+	"github.com/xtracdev/goes"
 	"github.com/xtracdev/pgconn"
 	"github.com/xtracdev/pgpublish"
+	"golang.org/x/tools/blog/atom"
 )
 
 func init() {
 	var initFailed bool
 	var atomProcessor *atomdata.AtomDataProcessor
+	var atomEncrypter *atompub.AtomEncrypter
 
 	log.Info("Init test envionment")
-	config, err := pgconn.NewEnvConfig()
+	os.Setenv("FEED_THRESHOLD", "2")
+	env, err := envinject.NewInjectedEnv()
 	if err != nil {
 		log.Warnf("Failed environment init: %s", err.Error())
 		initFailed = true
 	}
 
-	db,err := pgconn.OpenAndConnect(config.ConnectString(),1)
+	db, err := pgconn.OpenAndConnect(env, 1)
 	if err != nil {
 		log.Warnf("Failed environment init: %s", err.Error())
 		initFailed = true
@@ -43,6 +47,12 @@ func init() {
 
 	os.Unsetenv(atompub.KeyAlias)
 
+	atomEncrypter, err = atompub.NewAtomEncrypter(env)
+	if err != nil {
+		log.Warnf("Failed environment init: %s", err.Error())
+		initFailed = true
+	}
+
 	Given(`^some events not yet assigned to a feed$`, func() {
 		log.Info("check init")
 		if initFailed {
@@ -50,7 +60,7 @@ func init() {
 			return
 		}
 
-		atomProcessor = atomdata.NewAtomDataProcessor(db.DB)
+		atomProcessor, _ = atomdata.NewAtomDataProcessor(db.DB, env)
 		assert.Nil(T, err, "Failed to initialize atom publisher")
 
 		log.Info("clean out tables")
@@ -58,10 +68,6 @@ func init() {
 		assert.Nil(T, err)
 		_, err = db.Exec("delete from t_aefd_feed")
 		assert.Nil(T, err)
-
-		os.Setenv("FEED_THRESHOLD", "2")
-		atomdata.ReadFeedThresholdFromEnv()
-		assert.Equal(T, 2, atomdata.FeedThreshold)
 
 		log.Info("add some events")
 		eventPtr := &goes.Event{
@@ -71,8 +77,8 @@ func init() {
 			Payload:  []byte("ok"),
 		}
 
-		encodedEvent := pgpublish.EncodePGEvent(eventPtr.Source,eventPtr.Version,
-			(eventPtr.Payload).([]byte),eventPtr.TypeCode, time.Now())
+		encodedEvent := pgpublish.EncodePGEvent(eventPtr.Source, eventPtr.Version,
+			(eventPtr.Payload).([]byte), eventPtr.TypeCode, time.Now())
 		err = atomProcessor.ProcessMessage(encodedEvent)
 		assert.Nil(T, err)
 	})
@@ -83,7 +89,7 @@ func init() {
 
 	When(`^I retrieve the recent resource$`, func() {
 		//Create a test server
-		recentHandler, err := atompub.NewRecentHandler(db.DB, "server:12345")
+		recentHandler, err := atompub.NewRecentHandler(db.DB, "server:12345", env, atomEncrypter)
 		if !assert.Nil(T, err) {
 			return
 		}
@@ -140,8 +146,8 @@ func init() {
 			Payload:  []byte("ok ok"),
 		}
 
-		encodedEvent := pgpublish.EncodePGEvent(eventPtr.Source,eventPtr.Version,
-			(eventPtr.Payload).([]byte),eventPtr.TypeCode, time.Now())
+		encodedEvent := pgpublish.EncodePGEvent(eventPtr.Source, eventPtr.Version,
+			(eventPtr.Payload).([]byte), eventPtr.TypeCode, time.Now())
 		err = atomProcessor.ProcessMessage(encodedEvent)
 		assert.Nil(T, err)
 
@@ -152,8 +158,8 @@ func init() {
 			Payload:  []byte("ok ok ok"),
 		}
 
-		encodedEvent = pgpublish.EncodePGEvent(eventPtr.Source,eventPtr.Version,
-			(eventPtr.Payload).([]byte),eventPtr.TypeCode, time.Now())
+		encodedEvent = pgpublish.EncodePGEvent(eventPtr.Source, eventPtr.Version,
+			(eventPtr.Payload).([]byte), eventPtr.TypeCode, time.Now())
 		err = atomProcessor.ProcessMessage(encodedEvent)
 		assert.Nil(T, err)
 	})
@@ -164,7 +170,7 @@ func init() {
 	})
 
 	When(`^I again retrieve the recent resource$`, func() {
-		recentHandler, err := atompub.NewRecentHandler(db.DB, "server:12345")
+		recentHandler, err := atompub.NewRecentHandler(db.DB, "server:12345", env, atomEncrypter)
 		if !assert.Nil(T, err) {
 			return
 		}

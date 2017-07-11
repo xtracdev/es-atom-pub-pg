@@ -3,17 +3,18 @@ package main
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
-	"net/url"
-	"crypto/tls"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kms"
 )
 
 //Decrypt from cryptopasta commit bc3a108a5776376aa811eea34b93383837994340
@@ -42,7 +43,7 @@ func Decrypt(ciphertext []byte, key *[32]byte) (plaintext []byte, err error) {
 
 func readRecent(feedUrl string) ([]byte, error) {
 
-	parsed,err := url.Parse(feedUrl)
+	parsed, err := url.Parse(feedUrl)
 	if err != nil {
 		return nil, err
 	}

@@ -5,12 +5,13 @@ import (
 	"expvar"
 	_ "expvar"
 	"fmt"
+	"net/http"
+	"strings"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
+	"github.com/xtracdev/envinject"
 	atompub "github.com/xtracdev/es-atom-pub-pg"
-	"net/http"
-	"os"
-	"strings"
 	"github.com/xtracdev/pgconn"
 )
 
@@ -22,18 +23,6 @@ var insecureConfigBanner = `
 |  | |  |\   | .----)   |   |  |____ |   ----.|   --'  | |  |\  \----.|  |____
 |__| |__| \__| |_______/    |_______| \______| \______/  | _| '._____||_______|
  `
-
-func init() {
-	log.Info("Dumping environment...")
-	for _, e := range os.Environ() {
-		pair := strings.Split(e, "=")
-		if strings.Contains(strings.ToLower(pair[0]), "pass") {
-			log.Info(fmt.Sprintf("%s=XXXXXX", pair[0]))
-		} else {
-			log.Info(e)
-		}
-	}
-}
 
 type atomFeedPubConfig struct {
 	linkhost              string
@@ -58,16 +47,27 @@ func expvarHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "\n}\n")
 }
 
-func newAtomFeedPubConfig() *atomFeedPubConfig {
+func newAtomFeedPubConfig(env *envinject.InjectedEnv) *atomFeedPubConfig {
+
+	log.Info("Dumping environment...")
+	for _, e := range env.Environ() {
+		pair := strings.Split(e, "=")
+		if strings.Contains(strings.ToLower(pair[0]), "pass") {
+			log.Info(fmt.Sprintf("%s=XXXXXX", pair[0]))
+		} else {
+			log.Info(e)
+		}
+	}
+
 	var configErr bool
 	config := new(atomFeedPubConfig)
-	config.linkhost = os.Getenv("LINKHOST")
+	config.linkhost = env.Getenv("LINKHOST")
 	if config.linkhost == "" {
 		log.Println("Missing LINKHOST environment variable value")
 		configErr = true
 	}
 
-	config.listenerHostAndPort = os.Getenv("LISTENADDR")
+	config.listenerHostAndPort = env.Getenv("LISTENADDR")
 	if config.listenerHostAndPort == "" {
 		log.Println("Missing LISTENADDR environment variable value")
 		configErr = true
@@ -76,7 +76,7 @@ func newAtomFeedPubConfig() *atomFeedPubConfig {
 	log.Info("This container exposes its docker health check on port 4567")
 	config.hcListenerHostAndPort = ":4567"
 
-	keyAlias := os.Getenv(atompub.KeyAlias)
+	keyAlias := env.Getenv(atompub.KeyAlias)
 	if keyAlias == "" {
 		log.Println("Missing KEY_ALIAS environment variable value - required for secure config")
 		log.Println(insecureConfigBanner)
@@ -96,7 +96,7 @@ func CheckDBConfig(db *sql.DB) error {
 	return db.QueryRow("select 1").Scan(&one)
 }
 
-func makeHealthCheck(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func makeHealthCheck(db *sql.DB, ae *atompub.AtomEncrypter) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		wroteHeader := false
 		err := CheckDBConfig(db)
@@ -106,7 +106,7 @@ func makeHealthCheck(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 			log.Warnf("DB error on health check: %s", err.Error())
 		}
 
-		err = atompub.CheckKMSConfig()
+		err = ae.CheckKMSConfig()
 		if err != nil {
 			wroteHeader = true
 			w.WriteHeader(http.StatusInternalServerError)
@@ -121,34 +121,40 @@ func makeHealthCheck(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	//Read atom pub config
-	log.Info("Reading config from the environment")
-	feedConfig := newAtomFeedPubConfig()
-
-	log.Info("Connect to DB")
-	config, err := pgconn.NewEnvConfig()
+	env, err := envinject.NewInjectedEnv()
 	if err != nil {
 		log.Fatalf("Failed environment init: %s", err.Error())
 	}
 
-	postgressConnection,err := pgconn.OpenAndConnect(config.ConnectString(),100)
+	//Read atom pub config
+	log.Info("Reading config from the environment")
+	feedConfig := newAtomFeedPubConfig(env)
+
+	//Create an encrypter
+	atomEncrypter, err := atompub.NewAtomEncrypter(env)
+	if err != nil {
+		log.Fatalf("Failed environment init: %s", err.Error())
+	}
+
+	log.Info("Connect to DB")
+	postgressConnection, err := pgconn.OpenAndConnect(env, 100)
 	if err != nil {
 		log.Fatalf("Failed environment init: %s", err.Error())
 	}
 
 	//Create handlers
 	log.Info("Create and register handlers")
-	recentHandler, err := atompub.NewRecentHandler(postgressConnection.DB, feedConfig.linkhost)
+	recentHandler, err := atompub.NewRecentHandler(postgressConnection.DB, feedConfig.linkhost, env, atomEncrypter)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	archiveHandler, err := atompub.NewArchiveHandler(postgressConnection.DB, feedConfig.linkhost)
+	archiveHandler, err := atompub.NewArchiveHandler(postgressConnection.DB, feedConfig.linkhost, env, atomEncrypter)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	retrieveHandler, err := atompub.NewEventRetrieveHandler(postgressConnection.DB)
+	retrieveHandler, err := atompub.NewEventRetrieveHandler(postgressConnection.DB, atomEncrypter)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -163,7 +169,7 @@ func main() {
 
 	go func() {
 		hcMux := http.NewServeMux()
-		healthCheck := makeHealthCheck(postgressConnection.DB)
+		healthCheck := makeHealthCheck(postgressConnection.DB, atomEncrypter)
 		hcMux.HandleFunc("/health", healthCheck)
 		hcMux.HandleFunc("/debug/vars", expvarHandler)
 		log.Infof("Health check and expvars listening on %s", feedConfig.hcListenerHostAndPort)

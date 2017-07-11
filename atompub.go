@@ -2,21 +2,24 @@ package esatompubpg
 
 import (
 	"database/sql"
-	log "github.com/Sirupsen/logrus"
 	"encoding/base64"
 	"encoding/xml"
-	"fmt"
-	"time"
-	"os"
 	"errors"
+	"fmt"
+	"net/http"
 	"strconv"
+	"time"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/gorilla/mux"
+	"github.com/xtracdev/envinject"
 	atomdata "github.com/xtracdev/es-atom-data-pg"
 	"golang.org/x/tools/blog/atom"
-	"net/http"
-	"github.com/gorilla/mux"
 )
 
 var ErrBadDBConnection = errors.New("Nil db passed to factory method")
+var ErrMissingInjectedEnv = errors.New("Nil env passed to factory method")
+var ErrMissingAtomEncrypter = errors.New("Nil atom encrypter passed to factory method")
 
 //URIs assumed by handlers - these are fixed as they embed references relative to the URIs
 //used in this package
@@ -25,9 +28,7 @@ const (
 	RecentHandlerURI       = "/notifications/recent"
 	ArchiveHandlerURI      = "/notifications/{feedId}"
 	RetrieveEventHanderURI = "/events/{aggregateId}/{version}"
-	KeyAliasRoot           = "alias/"
-	KeyAlias               = "KEY_ALIAS"
-	LinkProto	       = "LINK_PROTO"
+	LinkProto              = "LINK_PROTO"
 )
 
 //Used to serialize event store content when directly retrieving using aggregate id and version
@@ -39,23 +40,6 @@ type EventStoreContent struct {
 	TypeCode    string    `xml:"typecode"`
 	Content     string    `xml:"content"`
 }
-
-
-
-//Link proto - http or https
-var linkProto string
-
-
-
-func init() {
-	linkProto = os.Getenv(LinkProto)
-	if linkProto == "" {
-		log.Infof("No %s from the environment - defaulting to https", LinkProto)
-		linkProto = "https"
-	}
-}
-
-
 
 //Add the retrieved events for a given feed to the atom feed structure
 func addItemsToFeed(feed *atom.Feed, events []atomdata.TimestampedEvent, linkhostport, proto string) {
@@ -89,18 +73,27 @@ func addItemsToFeed(feed *atom.Feed, events []atomdata.TimestampedEvent, linkhos
 
 }
 
-
-
-
-
 //NewRecentHandler instantiates the handler for retrieve recent notifications, which are those that have not
 //yet been assigned a feed id. This will be served up at /notifications/recent
 //The linkhostport argument is used to set the host and port in the link relations URL. This is useful
 //when proxying the feed, in which case the link relation URLs can reflect the proxied URLs, not the
 //direct URL.
-func NewRecentHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWriter, req *http.Request), error) {
+func NewRecentHandler(db *sql.DB, linkhostport string, env *envinject.InjectedEnv, ae *AtomEncrypter) (func(rw http.ResponseWriter, req *http.Request), error) {
 	if db == nil {
 		return nil, ErrBadDBConnection
+	}
+
+	if env == nil {
+		return nil, ErrMissingInjectedEnv
+	}
+
+	if ae == nil {
+		return nil, ErrMissingAtomEncrypter
+	}
+
+	linkProto := env.Getenv(LinkProto)
+	if linkProto == "" {
+		linkProto = "https"
 	}
 
 	return func(rw http.ResponseWriter, req *http.Request) {
@@ -153,7 +146,7 @@ func NewRecentHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWri
 			return
 		}
 
-		encodedOut, err := encryptOutput(kmsSvc, out)
+		encodedOut, err := ae.EncryptOutput(out)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
@@ -170,9 +163,22 @@ func NewRecentHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWri
 //The linkhostport argument is used to set the host and port in the link relations URL. This is useful
 //when proxying the feed, in which case the link relation URLs can reflect the proxied URLs, not the
 //direct URL.
-func NewArchiveHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWriter, req *http.Request), error) {
+func NewArchiveHandler(db *sql.DB, linkhostport string, env *envinject.InjectedEnv, ae *AtomEncrypter) (func(rw http.ResponseWriter, req *http.Request), error) {
 	if db == nil {
 		return nil, ErrBadDBConnection
+	}
+
+	if env == nil {
+		return nil, ErrMissingInjectedEnv
+	}
+
+	if ae == nil {
+		return nil, ErrMissingAtomEncrypter
+	}
+
+	linkProto := env.Getenv(LinkProto)
+	if linkProto == "" {
+		linkProto = "https"
 	}
 
 	return func(rw http.ResponseWriter, req *http.Request) {
@@ -253,7 +259,7 @@ func NewArchiveHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWr
 			return
 		}
 
-		encodedOut, err := encryptOutput(kmsSvc, out)
+		encodedOut, err := ae.EncryptOutput(out)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
@@ -278,9 +284,13 @@ func NewArchiveHandler(db *sql.DB, linkhostport string) (func(rw http.ResponseWr
 
 //NewRetrieveHandler instantiates a handler for the retrieval of specific events by aggregate id
 //and version. This will be served at /notifications/{aggregateId}/{version}
-func NewEventRetrieveHandler(db *sql.DB) (func(rw http.ResponseWriter, req *http.Request), error) {
+func NewEventRetrieveHandler(db *sql.DB, ae *AtomEncrypter) (func(rw http.ResponseWriter, req *http.Request), error) {
 	if db == nil {
 		return nil, ErrBadDBConnection
+	}
+
+	if ae == nil {
+		return nil, ErrMissingAtomEncrypter
 	}
 
 	return func(rw http.ResponseWriter, req *http.Request) {
@@ -322,7 +332,7 @@ func NewEventRetrieveHandler(db *sql.DB) (func(rw http.ResponseWriter, req *http
 			return
 		}
 
-		encodedOut, err := encryptOutput(kmsSvc, marshalled)
+		encodedOut, err := ae.EncryptOutput(marshalled)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
