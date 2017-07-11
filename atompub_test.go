@@ -6,12 +6,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	"github.com/gorilla/mux"
-	"github.com/stretchr/testify/assert"
-	"github.com/xtracdev/envinject"
-	"golang.org/x/tools/blog/atom"
-	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -19,6 +13,13 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/assert"
+	"github.com/xtracdev/envinject"
+	"golang.org/x/tools/blog/atom"
+	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 )
 
 func TestRetrieve(t *testing.T) {

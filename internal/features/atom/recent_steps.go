@@ -4,6 +4,12 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	. "github.com/gucumber/gucumber"
 	"github.com/stretchr/testify/assert"
@@ -14,11 +20,6 @@ import (
 	"github.com/xtracdev/pgconn"
 	"github.com/xtracdev/pgpublish"
 	"golang.org/x/tools/blog/atom"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"time"
 )
 
 func init() {

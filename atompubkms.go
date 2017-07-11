@@ -6,12 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/xtracdev/envinject"
-	"io"
 )
 
 const (

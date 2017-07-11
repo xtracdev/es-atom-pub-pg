@@ -5,13 +5,14 @@ import (
 	"expvar"
 	_ "expvar"
 	"fmt"
+	"net/http"
+	"strings"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/xtracdev/envinject"
 	atompub "github.com/xtracdev/es-atom-pub-pg"
 	"github.com/xtracdev/pgconn"
-	"net/http"
-	"strings"
 )
 
 var insecureConfigBanner = `

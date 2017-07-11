@@ -6,14 +6,15 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/xtracdev/envinject"
 	atomdata "github.com/xtracdev/es-atom-data-pg"
 	"golang.org/x/tools/blog/atom"
-	"net/http"
-	"strconv"
-	"time"
 )
 
 var ErrBadDBConnection = errors.New("Nil db passed to factory method")
